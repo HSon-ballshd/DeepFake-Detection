@@ -1,4 +1,4 @@
 FF_Img_Data/
 __pycache__/
 .ipynb_checkpoints/
-FF_Img_Data.zip/
+*.zip
