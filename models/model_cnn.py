@@ -224,4 +224,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-#  Test accuracy = 0.751 | loss = 0.505
+#   Test accuracy = 0.805 | loss = 0.421
