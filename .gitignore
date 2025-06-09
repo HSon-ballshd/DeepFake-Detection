@@ -2,5 +2,8 @@ FF_Img_Data/
 __pycache__/
 .ipynb_checkpoints/
 *.rar
+Latex Report/
+train_test_data/
+models/
 FF_Img_Data_faces/
 data/
