@@ -20,7 +20,7 @@ DATA_DIR = REPO_ROOT / "data/real_vs_fake"  # Giống như model_evolution.py
 OUT_DIR = SCRIPT_DIR / "model_cnn_artifacts"
 OUT_DIR.mkdir(exist_ok=True)
 
-IMG_SIZE, BATCH, EPOCHS = 128, 32, 10          # nhỏ hơn để debug nhanh
+IMG_SIZE, BATCH, EPOCHS = 128, 64, 10          # nhỏ hơn để debug nhanh
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {DEVICE}")
 
@@ -114,35 +114,23 @@ def export_architecture(model):
     print(f"Model has {arch_info['total_params']:,} total parameters")
     print(f"Model has {arch_info['trainable_params']:,} trainable parameters")
 
-def plot_history(history):
-    epochs = range(1, len(history['train_loss']) + 1)
-    
-    # Plot accuracy
-    plt.figure(figsize=(12, 4))
-    
-    plt.subplot(1, 2, 1)
-    plt.plot(epochs, history['train_acc'], 'b-', label='train accuracy')
-    plt.plot(epochs, history['val_acc'], 'r-', label='val accuracy')
-    plt.xlabel('Epoch')
-    plt.ylabel('Accuracy')
-    plt.legend()
-    plt.title('Training and Validation Accuracy')
-    
-    # Plot loss
-    plt.subplot(1, 2, 2)
-    plt.plot(epochs, history['train_loss'], 'b-', label='train loss')
-    plt.plot(epochs, history['val_loss'], 'r-', label='val loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.title('Training and Validation Loss')
-    
-    plt.tight_layout()
-    plt.savefig(OUT_DIR / "training_curves.png", dpi=120)
-    plt.close()
+def plot_and_save_history(hist):
+    json.dump(hist, open(OUT_DIR / "hist.json", "w"))
+
+    plt.figure(figsize=(5, 3))
+    plt.plot(hist["accuracy"], label="train")
+    plt.plot(hist["val_accuracy"], label="val")
+    plt.xlabel("epoch"); plt.ylabel("acc"); plt.legend(); plt.tight_layout()
+    plt.savefig(OUT_DIR / "acc_curve.png"); plt.close()
+
+    plt.figure(figsize=(5, 3))
+    plt.plot(hist["loss"], label="train")
+    plt.plot(hist["val_loss"], label="val")
+    plt.xlabel("epoch"); plt.ylabel("loss"); plt.legend(); plt.tight_layout()
+    plt.savefig(OUT_DIR / "loss_curve.png"); plt.close()
 
 def train_model(model, train_loader, val_loader, criterion, optimizer):
-    history = {"train_acc": [], "val_acc": [], "train_loss": [], "val_loss": []}
+    history = {"accuracy": [], "val_accuracy": [], "loss": [], "val_loss": []}
     model.to(DEVICE)
     best_acc = 0
     
@@ -165,8 +153,8 @@ def train_model(model, train_loader, val_loader, criterion, optimizer):
             total += y.size(0)
 
         acc = correct / total
-        history["train_acc"].append(acc)
-        history["train_loss"].append(total_loss / len(train_loader))
+        history["accuracy"].append(acc)
+        history["loss"].append(total_loss / len(train_loader))
 
         # Validation
         model.eval()
@@ -180,7 +168,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer):
                 val_total += y.size(0)
 
             val_acc = val_correct / val_total
-            history["val_acc"].append(val_acc)
+            history["val_accuracy"].append(val_acc)
             history["val_loss"].append(val_loss / len(val_loader))
 
         # Save best model
@@ -215,7 +203,7 @@ def main():
     with open(OUT_DIR / "hist.json", "w") as f:
         json.dump(history, f, indent=2)
     
-    plot_history(history)
+    plot_and_save_history(history)
     
     # Test evaluation (use validation logic)
     print("\nEvaluating on test set...")
@@ -235,3 +223,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+#  Test accuracy = 0.751 | loss = 0.505

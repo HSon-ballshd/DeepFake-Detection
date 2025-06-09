@@ -1,100 +1,153 @@
-# mode_baseline.py
+#model_baseline.py
 from pathlib import Path
-import json, matplotlib.pyplot as plt, tensorflow as tf
+import json
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torchvision import datasets, transforms
+from torch.utils.data import DataLoader, Subset
+import matplotlib.pyplot as plt
+import random
 
-SCRIPT_DIR = Path(__file__).resolve().parent          
-REPO_ROOT  = SCRIPT_DIR.parent                        
-LIST_DIR   = REPO_ROOT / "train_test_data"            
-OUT_DIR    = SCRIPT_DIR / "model_baseline_artifacts"          
+# ─── Đường dẫn ─────────────────────────────────────────────────────
+try:
+    REPO_ROOT = Path(__file__).resolve().parent.parent
+except NameError:
+    REPO_ROOT = Path.cwd()
+
+SCRIPT_DIR = REPO_ROOT / "models"
+DATA_DIR = REPO_ROOT / "data/real_vs_fake"
+OUT_DIR = SCRIPT_DIR / "model_baseline_artifacts"
 OUT_DIR.mkdir(exist_ok=True)
 
-IMG_SIZE, BATCH, EPOCHS = 256, 64, 10
-AUTOTUNE = tf.data.AUTOTUNE
+IMG_SIZE, BATCH, EPOCHS = 128, 64, 10
 
-def load_list(txt_name: str):
-    paths, labels = [], []
-    with open(LIST_DIR / txt_name) as f:
-        for rel in f:
-            abs_path = REPO_ROOT / rel.strip()
-            paths.append(str(abs_path))
-            labels.append(0.0 if 'original' in abs_path.parts else 1.0)
-    return paths, labels
+# ─── Transform ─────────────────────────────────────────────────────
+transform = transforms.Compose([
+    transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    transforms.ToTensor()
+])
 
-def make_dataset(txt_name: str):
-    paths, labels = load_list(txt_name)
-    ds = tf.data.Dataset.from_tensor_slices((paths, labels))
+# ─── DataLoader ────────────────────────────────────────────────────
+def get_dataloaders():
+    def get_subset(dataset):
+        indices = list(range(len(dataset)))
+        random.shuffle(indices)
+        subset_size = int(len(indices) * 0.3)
+        return Subset(dataset, indices[:subset_size])
 
-    def _pre(path, label):
-        img = tf.io.read_file(path)
-        img = tf.image.decode_jpeg(img, channels=3)
-        img = tf.image.resize(img, [IMG_SIZE, IMG_SIZE])
-        img = tf.cast(img, tf.float32) / 255.0
-        return tf.reshape(img, [-1]), tf.expand_dims(label, -1)
+    train_dataset = get_subset(datasets.ImageFolder(DATA_DIR / "train", transform=transform))
+    val_dataset = get_subset(datasets.ImageFolder(DATA_DIR / "valid", transform=transform))
+    test_dataset = get_subset(datasets.ImageFolder(DATA_DIR / "test", transform=transform))
 
-    return (ds.shuffle(len(paths))
-              .map(_pre, num_parallel_calls=AUTOTUNE)
-              .batch(BATCH).prefetch(AUTOTUNE))
+    return (
+        DataLoader(train_dataset, batch_size=BATCH, shuffle=True),
+        DataLoader(val_dataset, batch_size=BATCH),
+        DataLoader(test_dataset, batch_size=BATCH)
+    )
 
-def build_model():
-    m = tf.keras.Sequential([
-        tf.keras.layers.Input(shape=(IMG_SIZE*IMG_SIZE*3,)),
-        tf.keras.layers.Dense(512, activation='relu'),
-        tf.keras.layers.Dense(128, activation='relu'),
-        tf.keras.layers.Dense(1,   activation='sigmoid')
-    ])
-    m.compile(optimizer='adam',
-              loss='binary_crossentropy',
-              metrics=['accuracy'])
-    return m
+# ─── Mô hình mạng nơ-ron ──────────────────────────────────────────
+class SimpleNN(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.model = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(IMG_SIZE * IMG_SIZE * 3, 512),
+            nn.ReLU(),
+            nn.Linear(512, 128),
+            nn.ReLU(),
+            nn.Linear(128, 1),
+            nn.Sigmoid()
+        )
 
-def export_architecture(model):
-    from keras.utils import plot_model	
-    # JSON
-    (OUT_DIR / "baseline_arch.json").write_text(model.to_json(indent=2))
+    def forward(self, x):
+        return self.model(x)
 
-    plot_model(
-        model,
-        to_file=str(OUT_DIR / "baseline_arch.png"),
-        show_shapes=True,
-        show_layer_names=True,
-        dpi=120,
-        rankdir="LR"
-    )   
+# ─── Train và Eval ─────────────────────────────────────────────────
+def train_model(model, train_loader, val_loader, criterion, optimizer):
+    history = {"accuracy": [], "val_accuracy": [], "loss": [], "val_loss": []}
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
 
-def plot_history(hist_dict):
-    plt.figure(figsize=(5,3))
-    plt.plot(hist_dict["accuracy"], label="train")
-    plt.plot(hist_dict["val_accuracy"], label="val")
+    for epoch in range(EPOCHS):
+        model.train()
+        total_loss, correct, total = 0, 0, 0
+        for x, y in train_loader:
+            x, y = x.to(device), y.to(device).unsqueeze(1).float()
+            out = model(x)
+            loss = criterion(out, y)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            total_loss += loss.item()
+            correct += ((out > 0.5) == y).sum().item()
+            total += y.size(0)
+
+        acc = correct / total
+        history["accuracy"].append(acc)
+        history["loss"].append(total_loss / len(train_loader))
+
+        # Validation
+        model.eval()
+        with torch.no_grad():
+            val_loss, val_correct, val_total = 0, 0, 0
+            for x, y in val_loader:
+                x, y = x.to(device), y.to(device).unsqueeze(1).float()
+                out = model(x)
+                val_loss += criterion(out, y).item()
+                val_correct += ((out > 0.5) == y).sum().item()
+                val_total += y.size(0)
+
+            val_acc = val_correct / val_total
+            history["val_accuracy"].append(val_acc)
+            history["val_loss"].append(val_loss / len(val_loader))
+
+        print(f"Epoch {epoch+1}/{EPOCHS} | acc={acc:.3f} | val_acc={val_acc:.3f}")
+    return history
+
+# ─── Plot và lưu kết quả ──────────────────────────────────────────
+def plot_and_save_history(hist):
+    json.dump(hist, open(OUT_DIR / "hist.json", "w"))
+
+    plt.figure(figsize=(5, 3))
+    plt.plot(hist["accuracy"], label="train")
+    plt.plot(hist["val_accuracy"], label="val")
     plt.xlabel("epoch"); plt.ylabel("acc"); plt.legend(); plt.tight_layout()
     plt.savefig(OUT_DIR / "acc_curve.png"); plt.close()
 
-    plt.figure(figsize=(5,3))
-    plt.plot(hist_dict["loss"], label="train")
-    plt.plot(hist_dict["val_loss"], label="val")
+    plt.figure(figsize=(5, 3))
+    plt.plot(hist["loss"], label="train")
+    plt.plot(hist["val_loss"], label="val")
     plt.xlabel("epoch"); plt.ylabel("loss"); plt.legend(); plt.tight_layout()
     plt.savefig(OUT_DIR / "loss_curve.png"); plt.close()
 
+# ─── Hàm main ──────────────────────────────────────────────────────
 def main():
-    train_ds = make_dataset("train.txt")
-    val_ds   = make_dataset("val.txt")
-    test_ds  = make_dataset("test.txt")
+    train_loader, val_loader, test_loader = get_dataloaders()
+    model = SimpleNN()
+    criterion = nn.BCELoss()
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-    model = build_model()
-    model.summary()
-    export_architecture(model)
+    history = train_model(model, train_loader, val_loader, criterion, optimizer)
+    plot_and_save_history(history)
 
-    hist = model.fit(train_ds, epochs=EPOCHS, validation_data=val_ds)
+    # Evaluate
+    model.eval()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+    test_loss, test_correct, total = 0, 0, 0
+    with torch.no_grad():
+        for x, y in test_loader:
+            x, y = x.to(device), y.to(device).unsqueeze(1).float()
+            out = model(x)
+            test_loss += criterion(out, y).item()
+            test_correct += ((out > 0.5) == y).sum().item()
+            total += y.size(0)
 
-    # save artifacts
-    model.save(OUT_DIR / "baseline_nn.h5")
-    json.dump(hist.history, open(OUT_DIR / "hist.json", "w"))
-    plot_history(hist.history)
-
-    loss, acc = model.evaluate(test_ds, verbose=0)
-    print(f"\n  Test accuracy = {acc:.3f} | loss = {loss:.3f}")
+    print(f"\n  Test accuracy = {test_correct / total:.3f} | loss = {test_loss / len(test_loader):.3f}")
     print("  All outputs →", OUT_DIR.resolve())
 
 if __name__ == "__main__":
     main()
-
-#    Test accuracy = 0.500 | loss = 0.693
