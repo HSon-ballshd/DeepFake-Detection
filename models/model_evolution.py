@@ -16,8 +16,8 @@ except NameError:
     REPO_ROOT = Path.cwd()
 
 SCRIPT_DIR = REPO_ROOT / "models"
-DATA_DIR = REPO_ROOT / "data/real_vs_fake"
-OUT_DIR = SCRIPT_DIR / "model_evolution_artifacts"
+DATA_DIR = REPO_ROOT / "data/realvsfake"
+OUT_DIR = SCRIPT_DIR / "model_evolution_artifacts_final"
 OUT_DIR.mkdir(exist_ok=True)
 
 IMG_SIZE, BATCH, EPOCHS = 128, 64, 10
@@ -39,7 +39,7 @@ val_transform = transforms.Compose([
 # ─── DataLoader ────────────────────────────────────────────────────
 def get_dataloaders():
     train_dataset = datasets.ImageFolder(DATA_DIR / "train", transform=train_transform)
-    val_dataset = datasets.ImageFolder(DATA_DIR / "valid", transform=val_transform)
+    val_dataset = datasets.ImageFolder(DATA_DIR / "val", transform=val_transform)
     test_dataset = datasets.ImageFolder(DATA_DIR / "test", transform=val_transform)
 
     return (

@@ -16,11 +16,11 @@ except NameError:
     REPO_ROOT = Path.cwd()
 
 SCRIPT_DIR = REPO_ROOT / "models"
-DATA_DIR = REPO_ROOT / "data/real_vs_fake"
+DATA_DIR = REPO_ROOT / "data/realvsfake"
 OUT_DIR = SCRIPT_DIR / "model_baseline_artifacts"
 OUT_DIR.mkdir(exist_ok=True)
 
-IMG_SIZE, BATCH, EPOCHS = 128, 64, 10
+IMG_SIZE, BATCH, EPOCHS = 128, 128, 10
 
 # ─── Transform ─────────────────────────────────────────────────────
 transform = transforms.Compose([
@@ -37,7 +37,7 @@ def get_dataloaders():
         return Subset(dataset, indices[:subset_size])
 
     train_dataset = get_subset(datasets.ImageFolder(DATA_DIR / "train", transform=transform))
-    val_dataset = get_subset(datasets.ImageFolder(DATA_DIR / "valid", transform=transform))
+    val_dataset = get_subset(datasets.ImageFolder(DATA_DIR / "val", transform=transform))
     test_dataset = get_subset(datasets.ImageFolder(DATA_DIR / "test", transform=transform))
 
     return (
@@ -152,4 +152,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-#  Test accuracy = 0.751 | loss = 0.505
+#  Test accuracy = 0.474 | loss = 0.719

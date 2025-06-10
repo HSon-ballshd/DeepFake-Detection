@@ -16,11 +16,11 @@ except NameError:
     SCRIPT_DIR = Path.cwd()
 
 REPO_ROOT = SCRIPT_DIR.parent
-DATA_DIR = REPO_ROOT / "data/real_vs_fake"  # Giống như model_evolution.py
+DATA_DIR = REPO_ROOT / "data/realvsfake" 
 OUT_DIR = SCRIPT_DIR / "model_cnn_artifacts"
 OUT_DIR.mkdir(exist_ok=True)
 
-IMG_SIZE, BATCH, EPOCHS = 128, 64, 10          # nhỏ hơn để debug nhanh
+IMG_SIZE, BATCH, EPOCHS = 128, 128, 10          # nhỏ hơn để debug nhanh
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {DEVICE}")
 
@@ -42,7 +42,7 @@ val_transform = transforms.Compose([
 def get_dataloaders(subset_frac=0.3):
     """Tạo DataLoader giống như model_evolution.py"""
     train_dataset = datasets.ImageFolder(DATA_DIR / "train", transform=train_transform)
-    val_dataset = datasets.ImageFolder(DATA_DIR / "valid", transform=val_transform)
+    val_dataset = datasets.ImageFolder(DATA_DIR / "val", transform=val_transform)
     test_dataset = datasets.ImageFolder(DATA_DIR / "test", transform=val_transform)
     
     # Subset for debug (giống như subset_frac trong code cũ)
@@ -224,4 +224,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-#   Test accuracy = 0.805 | loss = 0.421
+#     Test accuracy = 0.476 | loss = 0.703
