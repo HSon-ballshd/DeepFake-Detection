@@ -4,3 +4,4 @@ __pycache__/
 *.rar
 Latex Report/
 data/
+models/model_evolution_artifacts_final/*.pth
